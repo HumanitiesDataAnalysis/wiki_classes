@@ -17,9 +17,12 @@ class Wikipedia():
     def iter_over_query(self, query):
         result_set = self.con.cursor().execute(query)
         while True:
-            title, text = result_set.fetchone()
-            yield Article(title, text)
-    
+            try:
+                title, text = result_set.fetchone()
+                yield Article(title, text)
+            except:
+                break
+            
     def __iter__(self):
         for article in self.iter_over_query("SELECT titles, text FROM wiki"):
             yield article
