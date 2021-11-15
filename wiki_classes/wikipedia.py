@@ -6,10 +6,11 @@ from pathlib import Path
 from .article import Article
 
 class ArticleCollection():
-  def __init__(self, dir):
+  def __init__(self, dir, articles = None):
     # dir: where the files for this are stored
     self.dir = dir
-    
+    if articles is not None:
+      self.fill_from_articles(articles)
 
   def fill_from_articles(self, articles):
     self.titles = []
@@ -33,13 +34,27 @@ class ArticleCollection():
   def create_database_connection(self):
       self.con = duckdb.connect(":memory:")
       self.con.execute(f"CREATE VIEW wiki AS SELECT * FROM parquet_scan('{self.dir}/*.parquet')")        
-      
+
+  def get_articles(self, titles, foldername = None):
+    if foldername is None:
+      raise ValueError("Please specify a foldername to store this search in.")
+    articles = []
+    tb = pa.table({'titles': titles})
+    cursor = self.con.register_arrow(foldername, tb)
+
+    for article in self.iter_over_query(f'SELECT * FROM wiki NATURAL JOIN "{foldername}"', cursor):
+      articles.append(article)
+
+    return ArticleCollection(foldername, articles)
+
   def get_article(self, title):
       title, text = self.con.query(f"SELECT titles, text FROM wiki WHERE titles='{title}'").fetchone()
       return Article(title, text)
   
-  def iter_over_query(self, query):
-      result_set = self.con.cursor().execute(query)
+  def iter_over_query(self, query, cursor = None):
+      if cursor is None:
+        cursor = self.con.cursor()
+      result_set = cursor.execute(query)
       while True:
           try:
               title, text = result_set.fetchone()
